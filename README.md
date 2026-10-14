@@ -666,11 +666,35 @@ not notarized; downloaded copies may be blocked by Gatekeeper.
 
 ### Release automation
 
-[CI](.github/workflows/ci.yml) lints the automation, builds, runs the Swift test
-suite, and builds and verifies a universal DMG on every PR and push to `main`.
-Its downloadable artifacts are local test builds. Enable the **verify** check
-as a required status check in GitHub branch protection to enforce it before merge.
+[CI](.github/workflows/ci.yml) lints the automation and Swift, builds, runs the
+Swift test suite with coverage, and builds and verifies a universal DMG on every
+PR and push to `main`. It also copies the app from the DMG and verifies that it
+launches and initializes a disposable database on the macOS runner.
+Its downloadable app artifacts are local test builds. The **verify** check is
+required before merging to protected `main`. Actions are pinned to commit SHAs;
+Dependabot proposes updates weekly.
 The Swift package currently has no third-party dependencies to audit.
+
+Coverage measures executable **UllageCore** code, excluding test code, the CLI,
+and the SwiftUI app. CI requires at least **85% line coverage** (the initial local
+measurement was 89.25%). Each run publishes overall line/function/region coverage
+and per-file line coverage in its summary. Download `Ullage-test-reports` for the
+HTML report (`coverage/html/index.html`), LLVM JSON, LCOV, and JUnit test results.
+Reports are retained for 14 days. No external coverage service or token is needed.
+
+Run the same checks locally:
+
+```bash
+brew install swiftlint
+swiftlint lint --strict
+python3 scripts/test_coverage.py
+swift test --enable-code-coverage --xunit-output .build/test-results.xml
+python3 scripts/coverage.py
+```
+
+SwiftLint checks source, tests, and the package manifest. Existing violations are
+recorded in `.swiftlint-baseline.json`; new violations fail CI. Do not regenerate
+the baseline to approve new warnings. Shrink it as existing warnings are fixed.
 
 For signed releases, configure these GitHub Actions repository secrets once:
 
