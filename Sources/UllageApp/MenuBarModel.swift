@@ -4,11 +4,6 @@ import Foundation
 import SwiftUI
 import UllageCore
 
-/// Owns the collector and publishes what the menu bar draws.
-///
-/// Two SQLite connections on the same file: the tailer writes on its own queue,
-/// this object reads on the main actor. WAL mode allows exactly that, and it is
-/// why the model never shares the ingestor's connection.
 /// Everything the Context tools window shows for one range, read in one pass.
 struct SaverPageData {
     var details: [SaverDetail]
@@ -24,15 +19,14 @@ final class MenuBarModel: ObservableObject {
     /// What the menu bar item shows: always whichever session spoke last (or
     /// the pinned one). It keeps following even while the popover is frozen.
     @Published private(set) var menuBarState: MenuBarState = MenuBarFormatter.state(for: nil)
-    @Published private(set) var errorMessage: String?
+    @Published var errorMessage: String?
     /// The main window's page. The popover's rows set it before opening the
     /// window, so a row lands on its own page.
     @Published var windowPage: MainPage = .overview
-    @Published private(set) var isWatching = false
+    @Published var isWatching = false
+    @Published var isRestarting = false
     @Published private(set) var databasePath: String = ClaudePaths.defaultDatabaseURL().path
 
-    // M5 — the popover's extra inputs. `selection` is the only thing the user
-    // sets; everything else is re-read from the database on every refresh.
     @Published var selection: SessionSelection = .automatic {
         didSet {
             guard selection != oldValue else { return }
@@ -97,14 +91,14 @@ final class MenuBarModel: ObservableObject {
     @Published private(set) var planLimits: [PlanLimitDisplay] = []
     /// What Ullage itself saw in each plan-wide limit's window, by display id.
     @Published private(set) var planLimitUsage: [String: Store.WindowUsage] = [:]
-    @Published private(set) var claudeLimitsError: String?
+    @Published var claudeLimitsError: String?
 
     static let checksClaudeLimitsKey = "checksClaudePlanLimits"
     static let claudeLimitsInterval: TimeInterval = 5 * 60
 
     /// Off by default: it is the one request Ullage makes on its own — Claude
     /// Code's token to Anthropic, the same place Claude Code sends it.
-    @Published var checksClaudeLimits = UserDefaults.standard.bool(forKey: MenuBarModel.checksClaudeLimitsKey) {
+    @Published var checksClaudeLimits: Bool {
         didSet {
             guard checksClaudeLimits != oldValue else { return }
             UserDefaults.standard.set(checksClaudeLimits, forKey: Self.checksClaudeLimitsKey)
@@ -122,33 +116,10 @@ final class MenuBarModel: ObservableObject {
         }
     }
 
-    private var lastClaudeFetch: Date?
-    private var claudeFetchInFlight = false
-    private var claudeLimitsTimer: Timer?
-
-    func fetchClaudeLimits(force: Bool = false) {
-        guard checksClaudeLimits, !claudeFetchInFlight else { return }
-        if !force, let last = lastClaudeFetch, Date().timeIntervalSince(last) < 60 { return }
-        claudeFetchInFlight = true
-        lastClaudeFetch = Date()
-        let path = databasePath
-        Task.detached {
-            let failure: String?
-            do {
-                // Its own connection: the fetch blocks for up to the timeout,
-                // and it must hold neither the reader nor the tailer's writer.
-                try ClaudeUsageClient.refresh(into: try Store(path: path))
-                failure = nil
-            } catch {
-                failure = "\(error)"
-            }
-            await MainActor.run {
-                self.claudeFetchInFlight = false
-                self.claudeLimitsError = failure
-                self.refresh()
-            }
-        }
-    }
+    var lastClaudeFetch: Date?
+    var claudeFetchInFlight = false
+    var claudeLimitsTimer: Timer?
+    var claudeFetchTask: Task<Void, Never>?
 
     // MARK: Token savers
 
@@ -163,19 +134,16 @@ final class MenuBarModel: ObservableObject {
     /// Terminal runs still going, each with the marker its script writes its
     /// exit status to when it ends.
     private var installWatches: [TokenSaver: (plan: InstallPlan, marker: URL, started: Date)] = [:]
-    private var installTimer: Timer?
-    /// How a finished run went. Unlike `saverPending` it survives the popover
-    /// closing — a run often ends while it is closed — and is dropped once it
-    /// has been seen: on the close after an open that showed it.
+    var installTimer: Timer?
+    /// Install outcomes survive closing until they have been shown once.
     private var saverResults: [TokenSaver: String] = [:]
     private var resultsShown: Set<TokenSaver> = []
     static let installWatchLimit: TimeInterval = 30 * 60
 
-    private let switchboard = SaverSwitchboard()
-    private lazy var installer = SaverInstaller(switchboard: switchboard)
+    private let environment: [String: String]
+    private let switchboard: SaverSwitchboard
+    private lazy var installer = SaverInstaller(environment: environment, switchboard: switchboard)
     private var saverInstalls: [TokenSaver: SaverInstallation] = [:]
-    // Other programs' files and a 30-day scan: re-read on a slower clock than
-    // the 15-second refresh, and at once after a switch.
     private var saverStates: (at: Date, states: [TokenSaver: SaverSwitchState])?
     private var saverLedger: (at: Date, entries: [LedgerEntry])?
     private var saverComparison: (at: Date, cwd: String, value: [TokenSaver: OutputComparison])?
@@ -257,9 +225,12 @@ final class MenuBarModel: ObservableObject {
     /// Polls the markers every two seconds while any run is going; stops by
     /// itself when none is.
     private func watchInstalls() {
-        guard installTimer == nil else { return }
+        guard installTimer == nil, !isStopping else { return }
         installTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.checkInstalls() }
+            Task { @MainActor in
+                guard let self, !self.isStopping else { return }
+                self.checkInstalls()
+            }
         }
     }
 
@@ -297,7 +268,7 @@ final class MenuBarModel: ObservableObject {
             saverInstalls = Dictionary(uniqueKeysWithValues: TokenSaver.allCases.map { ($0, installer.installation(of: $0)) })
         }
         if saverLedger.map({ now.timeIntervalSince($0.at) > Self.saverCacheInterval }) ?? true {
-            saverLedger = (now, store.ledger(since: now.addingTimeInterval(-31 * 86_400)))
+            saverLedger = (now, store.ledger(since: now.addingTimeInterval(-31 * 86_400), environment: environment))
         }
         let report = try sessionId.map { try store.saverReport(sessionId: $0, ledger: saverLedger?.entries ?? []) }
         var comparison: [TokenSaver: OutputComparison] = [:]
@@ -317,56 +288,34 @@ final class MenuBarModel: ObservableObject {
         if popoverIsOpen { resultsShown.formUnion(saverResults.keys) }
     }
 
-    private var readStore: Store?
-    private var tailer: SessionTailer?
-    private var refreshTimer: Timer?
+    var readStore: Store?
+    var tailer: SessionTailer?
+    var refreshTimer: Timer?
+    var refreshTask: Task<Void, Never>?
+    var restartTask: Task<Void, Never>?
+    var serviceGeneration = UUID()
+    var isStopping = false
+    let transcriptRoots: [URL]
+    let makeWatcher: () -> DirectoryWatching
 
-    private init() {}
-
-    func start() {
-        guard tailer == nil else { return }
-        do {
-            let path = ClaudePaths.defaultDatabaseURL().path
-            databasePath = path
-            let writeStore = try Store(path: path)
-            // Left behind by two writers numbering the same stream; see
-            // `Ingestor.assignTurn`. Nothing to do on a clean database.
-            _ = try? writeStore.repairDuplicateTurns()
-            readStore = try Store(path: path)
-
-            let tailer = SessionTailer(ingestor: Ingestor(store: writeStore))
-            tailer.onIngest = { [weak self] _ in
-                Task { @MainActor in self?.refresh() }
-            }
-            tailer.onError = { [weak self] error in
-                Task { @MainActor in self?.errorMessage = "\(error)" }
-            }
-            try tailer.start(roots: TranscriptSources.roots())
-            self.tailer = tailer
-            isWatching = true
-            refresh()
-
-            // The display has to go idle on its own: no turn completing means no
-            // file event to prompt a redraw, and a stale number is the one thing
-            // worse than no number.
-            refreshTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
-                Task { @MainActor in self?.refresh() }
-            }
-            // The endpoint rate-limits; five minutes is plenty for windows
-            // measured in hours and days.
-            claudeLimitsTimer = Timer.scheduledTimer(withTimeInterval: Self.claudeLimitsInterval, repeats: true) { [weak self] _ in
-                Task { @MainActor in self?.fetchClaudeLimits(force: true) }
-            }
-            fetchClaudeLimits(force: true)
-        } catch {
-            errorMessage = "\(error)"
-            isWatching = false
-        }
+    init(
+        databaseURL: URL = ClaudePaths.defaultDatabaseURL(),
+        transcriptRoots: [URL] = TranscriptSources.roots(),
+        checksClaudeLimits: Bool? = nil,
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        makeWatcher: @escaping () -> DirectoryWatching = { makeDirectoryWatcher() }
+    ) {
+        databasePath = databaseURL.path
+        self.transcriptRoots = transcriptRoots
+        self.checksClaudeLimits = checksClaudeLimits ?? UserDefaults.standard.bool(forKey: Self.checksClaudeLimitsKey)
+        self.makeWatcher = makeWatcher
+        self.environment = environment
+        switchboard = SaverSwitchboard(environment: environment)
     }
 
-    /// Look at one agent's window instead of the session's. Assigning `focus`
-    /// directly would re-enter `refresh` from inside itself, so selection goes
-    /// through here.
+}
+
+extension MenuBarModel {
     func focus(on scope: AgentScope) {
         guard focus != scope else { return }
         focus = scope
@@ -431,10 +380,13 @@ final class MenuBarModel: ObservableObject {
     /// Full re-sweep of the transcript tree, off the main thread: on a large
     /// backlog this is seconds of work, not milliseconds.
     func refreshNow() {
-        guard let tailer else { return }
-        Task.detached {
-            _ = tailer.sweepNow()
-            await MainActor.run { self.refresh() }
+        guard isWatching, !isStopping, refreshTask == nil, let tailer else { return }
+        let generation = serviceGeneration
+        refreshTask = Task {
+            await Task.detached { _ = tailer.sweepNow() }.value
+            guard generation == serviceGeneration else { return }
+            refreshTask = nil
+            refresh()
         }
     }
 

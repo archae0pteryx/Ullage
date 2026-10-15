@@ -181,6 +181,14 @@ The DMG installs the menu bar app. For the standalone `ullage` command and
 `brew services`, use Homebrew below. To start the app at login, add Ullage under
 System Settings → General → Login Items.
 
+Left-click the menu bar item to open the dashboard. Right-click or Control-click
+it for **Restart Service** and **Quit Ullage**. Restart refreshes the app's
+monitoring and background polling without deleting history or closing its windows.
+While it runs, the menu shows **Restarting…**; if it fails, the dashboard shows
+**Monitoring stopped** and the error, and you can retry. Quit waits for app-owned
+background work to finish before exiting. Both actions run without a confirmation
+dialog and leave a separately started Homebrew/CLI phone service alone.
+
 ### With Homebrew
 
 ```bash
