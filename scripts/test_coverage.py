@@ -1,7 +1,9 @@
 """Check report filtering and weighted totals without Swift or LLVM."""
 import unittest
+from pathlib import Path
+import tempfile
 
-from coverage import check_coverage, core_files, summary
+from coverage import check_coverage, core_files, coverage_binary, summary
 
 
 def file(path, covered, count):
@@ -10,6 +12,16 @@ def file(path, covered, count):
 
 
 class CoverageTests(unittest.TestCase):
+    def test_debug_symbol_directory_is_not_a_test_executable(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            binary = root / "UllagePackageTests.xctest/Contents/MacOS/UllagePackageTests"
+            binary.parent.mkdir(parents=True)
+            binary.write_text("test executable")
+            binary.chmod(0o755)
+            binary.with_suffix(".dSYM").mkdir()
+            self.assertEqual(coverage_binary(root), binary)
+
     def test_excludes_tests_and_app_and_weights_by_executable_lines(self):
         report = {"data": [{"files": [
             file("/repo/Sources/UllageCore/A.swift", 1, 1),

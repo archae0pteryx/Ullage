@@ -679,7 +679,7 @@ Coverage measures executable **UllageCore** code, excluding test code, the CLI,
 and the SwiftUI app. CI requires at least **85% line coverage** (the initial local
 measurement was 89.25%). Each run publishes overall line/function/region coverage
 and per-file line coverage in its summary. Download `Ullage-test-reports` for the
-HTML report (`coverage/html/index.html`), LLVM JSON, LCOV, and JUnit test results.
+HTML report (`html/index.html`), LLVM JSON, LCOV, and JUnit test results.
 Reports are retained for 14 days. No external coverage service or token is needed.
 
 Run the same checks locally:
@@ -688,7 +688,8 @@ Run the same checks locally:
 brew install swiftlint
 swiftlint lint --strict
 python3 scripts/test_coverage.py
-swift test --enable-code-coverage --xunit-output .build/test-results.xml
+mkdir -p coverage
+swift test --enable-code-coverage --xunit-output coverage/test-results.xml
 python3 scripts/coverage.py
 ```
 

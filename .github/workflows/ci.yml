@@ -33,16 +33,16 @@ jobs:
       - name: Lint Swift
         run: swiftlint lint --strict
       - name: Tests with coverage
-        run: swift test --enable-code-coverage --xunit-output .build/test-results.xml
+        run: |
+          mkdir -p coverage
+          swift test --enable-code-coverage --xunit-output coverage/test-results.xml
       - name: Report coverage and enforce minimum
         run: python3 scripts/coverage.py
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: always()
         with:
           name: Ullage-test-reports
-          path: |
-            coverage/
-            .build/test-results.xml
+          path: coverage/
           if-no-files-found: error
           retention-days: 14
       - name: Package and verify universal app
