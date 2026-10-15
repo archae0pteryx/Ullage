@@ -87,6 +87,7 @@ extension MenuBarModel {
             self.tailer = tailer
             guard !isStopping else { return }
             isWatching = true
+            errorMessage = nil
             refresh()
 
             // The display has to go idle on its own: no turn completing means no
@@ -101,8 +102,7 @@ extension MenuBarModel {
             // The endpoint rate-limits; five minutes is plenty for windows
             // measured in hours and days.
             claudeLimitsTimer = Timer.scheduledTimer(
-                withTimeInterval: Self.claudeLimitsInterval, repeats: true
-            ) { [weak self] _ in
+                withTimeInterval: Self.claudeLimitsInterval, repeats: true) { [weak self] _ in
                 Task { @MainActor in
                     guard let self, self.serviceGeneration == generation else { return }
                     self.fetchClaudeLimits(force: true)
