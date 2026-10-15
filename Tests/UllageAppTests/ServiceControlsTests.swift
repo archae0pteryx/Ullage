@@ -5,6 +5,57 @@ import UllageCore
 
 @MainActor
 final class ServiceControlsTests: XCTestCase {
+    func testCachedDisplayLoadsBeforeWatcherStartupFinishes() async throws {
+        let watcher = ControlledWatcher()
+        let entered = expectation(description: "watcher startup pending")
+        let gate = DispatchSemaphore(value: 0)
+        defer { gate.signal() }
+        watcher.startHook = {
+            entered.fulfill()
+            _ = gate.wait(timeout: .now() + 5)
+        }
+        let (model, _) = try makeModel { watcher }
+        let store = try Store(path: model.databasePath)
+        try store.upsert(call: CallRow(dedupeKey: "cached", ts: "2026-10-15T10:00:00Z",
+                                      sessionId: "cached", contextTokens: 100,
+                                      windowLimit: 200_000, sourceFile: "test"))
+        let restarting = model.restart()
+        await fulfillment(of: [entered], timeout: 5)
+        await model.displayRefreshTask?.value
+        XCTAssertTrue(model.isRestarting)
+        XCTAssertEqual(model.state.sessionId, "cached")
+        gate.signal()
+        await restarting?.value
+    }
+
+    func testAsyncDisplayRejectsOldSelectionAndHoldsTheOpenSession() async throws {
+        let (model, _) = try makeModel()
+        await model.restart()?.value
+        let store = try Store(path: model.databasePath)
+        for (id, timestamp) in [("older", "2026-10-15T10:00:00Z"), ("newer", "2026-10-15T11:00:00Z")] {
+            try store.upsert(call: CallRow(dedupeKey: id, ts: timestamp,
+                                          sessionId: id, contextTokens: 100, windowLimit: 200_000, sourceFile: "test"))
+        }
+        model.selection = .pinned("older")
+        model.selection = .pinned("newer")
+        while let task = model.displayRefreshTask { await task.value }
+        XCTAssertEqual(model.state.sessionId, "newer")
+        model.selection = .automatic
+        model.popoverDidOpen()
+        while let task = model.displayRefreshTask { await task.value }
+        try store.upsert(call: CallRow(dedupeKey: "latest", ts: "2026-10-15T12:00:00Z",
+                                      sessionId: "latest", contextTokens: 200,
+                                      windowLimit: 200_000, sourceFile: "test"))
+        model.refresh()
+        while let task = model.displayRefreshTask { await task.value }
+        XCTAssertEqual(model.state.sessionId, "newer", "An open popover holds its session")
+        XCTAssertEqual(model.menuBarState.sessionId, "latest", "The icon keeps following live activity")
+        model.popoverDidClose()
+        model.refresh()
+        while let task = model.displayRefreshTask { await task.value }
+        XCTAssertEqual(model.state.sessionId, "latest")
+    }
+
     func testRestartCatchesUpWithoutDeletingOrDuplicatingHistory() async throws {
         let (model, directory) = try makeModel()
         await model.restart()?.value

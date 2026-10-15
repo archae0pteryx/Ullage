@@ -21,7 +21,7 @@ tasks:
       - swift package resolve
 
   dev:
-    desc: Rebuild, replace the installed app, and run Debug with terminal logs
+    desc: Rebuild and restart the app and local HTTP service with terminal logs
     platforms: [darwin]
     interactive: true
     cmds:

@@ -43,6 +43,8 @@ extension MenuBarModel {
         // Drain them before releasing their stores or starting another writer.
         await refreshTask?.value
         await claudeFetchTask?.value
+        await displayRefreshTask?.value
+        await saverRefreshTask?.value
         refreshTask = nil
         claudeFetchTask = nil
         claudeFetchInFlight = false
@@ -59,7 +61,8 @@ extension MenuBarModel {
             // Left behind by two writers numbering the same stream; see
             // `Ingestor.assignTurn`. Nothing to do on a clean database.
             _ = try? writeStore.repairDuplicateTurns()
-            let reader = try Store(path: databasePath)
+            readStore = try Store(path: databasePath)
+            refresh()
             let generation = serviceGeneration
             let tailer = SessionTailer(ingestor: Ingestor(store: writeStore), watcher: makeWatcher())
             tailer.onIngest = { [weak self] _ in
@@ -83,8 +86,8 @@ extension MenuBarModel {
             }
             self.tailer = tailer
             guard !isStopping else { return }
-            readStore = reader
             isWatching = true
+            errorMessage = nil
             refresh()
 
             // The display has to go idle on its own: no turn completing means no
@@ -99,8 +102,7 @@ extension MenuBarModel {
             // The endpoint rate-limits; five minutes is plenty for windows
             // measured in hours and days.
             claudeLimitsTimer = Timer.scheduledTimer(
-                withTimeInterval: Self.claudeLimitsInterval, repeats: true
-            ) { [weak self] _ in
+                withTimeInterval: Self.claudeLimitsInterval, repeats: true) { [weak self] _ in
                 Task { @MainActor in
                     guard let self, self.serviceGeneration == generation else { return }
                     self.fetchClaudeLimits(force: true)
@@ -108,6 +110,7 @@ extension MenuBarModel {
             }
             fetchClaudeLimits(force: true)
         } catch {
+            readStore = nil
             errorMessage = "Monitoring stopped: \(error). Choose Restart Service to retry."
             isWatching = false
         }

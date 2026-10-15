@@ -227,7 +227,7 @@ then use the Taskfile as a shortcut to the existing scripts:
 
 ```bash
 task setup                           # install linters and resolve Swift packages
-task dev                             # Debug build → replace /Applications/Ullage.app → run
+task dev                             # Debug builds → restart app and local HTTP service
 task dev INSTALL_DIR="$HOME/Applications"  # use a different installation directory
 task clean dev                       # remove old build artifacts, then rebuild/install/run
 ```
@@ -235,9 +235,13 @@ task clean dev                       # remove old build artifacts, then rebuild/
 Rerun after code changes. Builds are incremental and use your Mac's architecture;
 there is no DMG or notarization step. The script builds successfully before
 quitting the old app, waits for shutdown, replaces only the app bundle, and starts
-the Debug build in the foreground with logs in your terminal. Quit Ullage from its
-menu to end the run. It keeps your existing history and preferences; replacing a
-Homebrew app shortcut leaves the Cellar installation and CLI service intact.
+the Debug app and local HTTP service from this checkout. The app collects
+transcripts; the service serves `http://127.0.0.1:7878` with `--no-watch`.
+Ctrl-C or **Quit Ullage** stops both. App logs appear in the terminal; service
+logs are in `.build/dev/service.log`. It keeps your existing history and
+preferences; replacing a Homebrew app shortcut leaves the Cellar installation
+intact. A running Homebrew service is unloaded for this session; use
+`brew services start ullage` to switch back to the installed service.
 To use a separate database, run `ULLAGE_DB=/tmp/ullage-dev.db task dev`.
 `task clean` removes Swift build artifacts, `dist/`, and `coverage/`; it keeps
 the installed app, history, and preferences. The scripts also work directly:
