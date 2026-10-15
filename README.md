@@ -220,6 +220,32 @@ open /Applications/Ullage.app
 
 Pass a directory to install elsewhere, e.g. `scripts/install-app.sh ~/Applications`.
 
+### Develop and test the menu bar app
+
+```bash
+scripts/dev.sh                       # Debug build → replace /Applications/Ullage.app → run
+scripts/dev.sh ~/Applications        # use a different installation directory
+```
+
+Rerun after code changes. Builds are incremental and use your Mac's architecture;
+there is no DMG or notarization step. The script builds successfully before
+quitting the old app, waits for shutdown, replaces only the app bundle, and starts
+the Debug build in the foreground with logs in your terminal. Quit Ullage from its
+menu to end the run. It keeps your existing history and preferences; replacing a
+Homebrew app shortcut leaves the Cellar installation and CLI service intact.
+To use a separate database, run `ULLAGE_DB=/tmp/ullage-dev.db scripts/dev.sh`.
+
+For the new controls, check left-click, right-click, and Control-click; restart
+monitoring and confirm history stays; then Quit and confirm the terminal returns.
+Automated regression tests: `swift test --filter ServiceControlsTests`.
+
+For breakpoints, [open the package in Xcode](https://developer.apple.com/documentation/xcode/creating-a-standalone-swift-package-with-xcode),
+select the `UllageApp` scheme and My Mac, then Run (⌘R). Quit any installed copy first. You can also attach Xcode's
+debugger to the Debug app started by `scripts/dev.sh`. This is a native compiled
+app: use Build & Run for the full process, and
+[SwiftUI Previews](https://developer.apple.com/documentation/xcode/adding-previews-to-your-interface-files)
+for view iteration. The native menu and Quit/Restart behavior need a full app run.
+
 Because the app is ad-hoc signed rather than notarized, a copy you didn't build
 yourself may draw
 a Gatekeeper warning; right-click the app and choose **Open**, or approve it once
@@ -740,6 +766,7 @@ Sources/UllageApp/     the SwiftUI menu bar popover and main window (macOS)
 Tests/                 unit tests for the collector and every display rule
 scripts/recon.sh       inspect the on-disk transcript format
 scripts/install-app.sh build, bundle, and install the app
+scripts/dev.sh         rebuild, reinstall, and run a Debug app with terminal logs
 scripts/package-app.sh build, sign, and package a universal DMG
 scripts/verify-dmg.sh  check the mounted release artifact
 scripts/model-windows.py  regenerate model windows from models.dev
