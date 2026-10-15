@@ -2,6 +2,9 @@
 .swiftpm/
 DerivedData/
 dist/
+coverage/
+.swiftlint_cache/
+__pycache__/
 *.xcuserstate
 xcuserdata/
 .DS_Store
