@@ -95,7 +95,11 @@ extension SaverLedgers {
                 let decision = decisions[index2]
                 let runsHere = matches.count(verb: verb, decision: index2, rewritten: decision.rewritten)
                 if runsHere > (used[index2]?[verb] ?? 0) {
-                    if let argument, decision.rewritten.contains(argument) { best = index2; break }
+                    if let argument,
+                       matches.contains(argument: argument, decision: index2, rewritten: decision.rewritten) {
+                        best = index2
+                        break
+                    }
                     if best == nil { best = index2 }
                 }
                 index2 -= 1
@@ -110,6 +114,7 @@ extension SaverLedgers {
     private struct RtkMatches {
         let patterns: [String: NSRegularExpression]
         var counts: [Int: [String: Int]] = [:]
+        var arguments: [Int: Set<String>] = [:]
 
         init(verbs: [String?]) {
             patterns = Dictionary(uniqueKeysWithValues: Set(verbs.compactMap { $0 }).compactMap { verb in
@@ -124,15 +129,32 @@ extension SaverLedgers {
             counts[decision, default: [:]][verb] = count
             return count
         }
+
+        mutating func contains(argument: String, decision: Int, rewritten: String) -> Bool {
+            if arguments[decision] == nil { arguments[decision] = Set(commandWords(in: rewritten)) }
+            return arguments[decision]?.contains(argument) == true
+        }
+    }
+
+    private static let commandWordPattern = try? NSRegularExpression(
+        pattern: #"(?:[^\s;&|()'"\\]|\\.|'[^']*'|"(?:[^"\\]|\\.)*")+"#
+    )
+
+    private static func commandWords(in command: String) -> [String] {
+        let range = NSRange(command.startIndex..., in: command)
+        return commandWordPattern?.matches(in: command, range: range).map {
+            let word = (command as NSString).substring(with: $0.range)
+            guard let quote = word.first, quote == "'" || quote == "\"", word.last == quote else { return word }
+            return String(word.dropFirst().dropLast())
+        } ?? []
     }
 
     /// The first word after the verb that isn't a flag, unquoted: `packages`
     /// in `ls packages`. Nil when there is none worth matching on.
     static func firstArgument(_ command: String?) -> String? {
-        let words = (command ?? "").split(separator: " ").dropFirst()
-        guard let word = words.first(where: { !$0.hasPrefix("-") }) else { return nil }
-        let bare = word.trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
-        return bare.count >= 2 ? bare : nil
+        let words = commandWords(in: command ?? "").dropFirst()
+        guard let word = words.first(where: { !$0.hasPrefix("-") }), word.count >= 2 else { return nil }
+        return word
     }
 
     /// How many times a rewrite runs `rtk <verb>`.
