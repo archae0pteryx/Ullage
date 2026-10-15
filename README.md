@@ -689,7 +689,7 @@ brew install swiftlint
 swiftlint lint --strict
 python3 scripts/test_coverage.py
 mkdir -p coverage
-swift test --enable-code-coverage --xunit-output coverage/test-results.xml
+swift test --enable-code-coverage --parallel --num-workers 3 --xunit-output coverage/test-results.xml
 python3 scripts/coverage.py
 ```
 
