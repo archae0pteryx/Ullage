@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 import tempfile
 
-from coverage import check_coverage, core_files, coverage_binary, summary
+from coverage import check_coverage, core_files, coverage_binaries, summary
 
 
 def file(path, covered, count):
@@ -20,7 +20,16 @@ class CoverageTests(unittest.TestCase):
             binary.write_text("test executable")
             binary.chmod(0o755)
             binary.with_suffix(".dSYM").mkdir()
-            self.assertEqual(coverage_binary(root), binary)
+            self.assertEqual(coverage_binaries(root), [binary])
+            app_binary = root / "UllageAppTests.xctest/Contents/MacOS/UllageAppTests"
+            app_binary.parent.mkdir(parents=True)
+            app_binary.write_text("app test executable")
+            app_binary.chmod(0o755)
+            self.assertEqual(coverage_binaries(root), sorted([binary, app_binary]))
+
+    def test_missing_test_executables_fails(self):
+        with tempfile.TemporaryDirectory() as directory, self.assertRaises(ValueError):
+            coverage_binaries(Path(directory))
 
     def test_excludes_tests_and_app_and_weights_by_executable_lines(self):
         report = {"data": [{"files": [

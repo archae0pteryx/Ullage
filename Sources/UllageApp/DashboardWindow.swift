@@ -45,7 +45,7 @@ final class DashboardModel: ObservableObject {
 struct DashboardWindow: View {
     static let id = "dashboard"
 
-    @StateObject private var model = DashboardModel()
+    @StateObject var model: DashboardModel
     @AppStorage("dashboard.tab") private var tab = DashboardModel.Tab.weekly.rawValue
     @AppStorage("dashboard.showAll") private var showAll = false
 

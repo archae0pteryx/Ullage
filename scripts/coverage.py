@@ -41,12 +41,12 @@ def check_coverage(files):
         raise ValueError(f"Core line coverage is below {MIN_LINE_COVERAGE}%")
 
 
-def coverage_binary(bin_dir):
-    binaries = [path for path in bin_dir.glob("*.xctest/Contents/MacOS/*")
-                if path.is_file() and os.access(path, os.X_OK)]
-    if len(binaries) != 1:
-        raise ValueError(f"Expected one XCTest executable, found {binaries}")
-    return binaries[0]
+def coverage_binaries(bin_dir):
+    binaries = sorted(path for path in bin_dir.glob("*.xctest/Contents/MacOS/*")
+                      if path.is_file() and os.access(path, os.X_OK))
+    if not binaries:
+        raise ValueError("No XCTest executables found")
+    return binaries
 
 
 def main():
@@ -66,7 +66,10 @@ def main():
 
     bin_dir = report_path.parent.parent
     command = ["xcrun", "llvm-cov"]
-    arguments = [str(coverage_binary(bin_dir)), f"-instr-profile={report_path.parent / 'default.profdata'}"]
+    binaries = coverage_binaries(bin_dir)
+    arguments = [str(binaries[0]), f"-instr-profile={report_path.parent / 'default.profdata'}"]
+    for binary in binaries[1:]:
+        arguments += ["-object", str(binary)]
     sources = [file["filename"] for file in files]
     subprocess.run(command + ["show"] + arguments + ["-format=html", f"-output-dir={out / 'html'}"]
                    + sources, check=True)
