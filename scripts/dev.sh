@@ -3,6 +3,7 @@
 # Usage: scripts/dev.sh [installation-directory]
 set -euo pipefail
 cd "$(dirname "$0")/.."
+echo "Development checkout: $PWD ($(git branch --show-current))"
 DEST_DIR="${1:-/Applications}"
 ULLAGE_BUILD_CONFIGURATION=debug scripts/install-app.sh "$DEST_DIR"
 echo 'Running Ullage (Debug). Quit Ullage to stop; rerun this script after editing.'

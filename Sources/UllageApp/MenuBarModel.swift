@@ -4,12 +4,6 @@ import Foundation
 import SwiftUI
 import UllageCore
 
-/// Everything the Context tools window shows for one range, read in one pass.
-struct SaverPageData {
-    var details: [SaverDetail]
-    var summary: SavingsSummary?
-}
-
 @MainActor
 final class MenuBarModel: ObservableObject {
     static let shared = MenuBarModel()
@@ -51,7 +45,7 @@ final class MenuBarModel: ObservableObject {
     func popoverDidOpen() {
         popoverIsOpen = true
         heldSessionId = nil      // re-latch onto whatever is current right now
-        saverStates = nil        // an install may have finished in Terminal
+        invalidateSaverStates() // an install may have finished in Terminal
         refresh()
         fetchClaudeLimits()
     }
@@ -143,10 +137,10 @@ final class MenuBarModel: ObservableObject {
     private let environment: [String: String]
     private let switchboard: SaverSwitchboard
     private lazy var installer = SaverInstaller(environment: environment, switchboard: switchboard)
-    private var saverInstalls: [TokenSaver: SaverInstallation] = [:]
-    private var saverStates: (at: Date, states: [TokenSaver: SaverSwitchState])?
-    private var saverLedger: (at: Date, entries: [LedgerEntry])?
-    private var saverComparison: (at: Date, cwd: String, value: [TokenSaver: OutputComparison])?
+    private var saverSnapshot: SaverSnapshot?
+    private var saverStatesGeneration = UUID()
+    private var saverRefreshPending = false
+    var saverRefreshTask: Task<Void, Never>?
     static let saverCacheInterval: TimeInterval = 60
 
     /// Writes Claude Code's user config. Only ever from the user's own click.
@@ -164,7 +158,7 @@ final class MenuBarModel: ObservableObject {
         } catch {
             saverPending[saver] = "Couldn't switch: \(error)"
         }
-        saverStates = nil
+        invalidateSaverStates()
         refresh()
     }
 
@@ -176,7 +170,7 @@ final class MenuBarModel: ObservableObject {
     func saverPage(range: SaverRange) async -> SaverPageData {
         let path = databasePath
         let sessionId = state.sessionId
-        let cached = saverLedger?.entries
+        let cached = saverSnapshot?.ledger?.entries
         return await Task.detached(priority: .userInitiated) {
             guard let store = try? Store(path: path) else { return SaverPageData(details: [], summary: nil) }
             let ledger = cached ?? store.ledger(since: Date().addingTimeInterval(-31 * 86_400))
@@ -186,11 +180,11 @@ final class MenuBarModel: ObservableObject {
     }
 
     func saverSwitchState(_ saver: TokenSaver) -> SaverSwitchState {
-        saverStates?.states[saver] ?? .notInstalled
+        saverSnapshot?.states?.states[saver] ?? .notInstalled
     }
 
     func saverIsInstalled(_ saver: TokenSaver) -> Bool {
-        saverInstalls[saver]?.isInstalled ?? false || saverSwitchState(saver) != .notInstalled
+        saverSnapshot?.installs[saver]?.isInstalled ?? false || saverSwitchState(saver) != .notInstalled
     }
 
     /// Puts a switch back the way it was before this popover changed it.
@@ -218,7 +212,7 @@ final class MenuBarModel: ObservableObject {
         } catch {
             saverPending[plan.saver] = "Couldn't start Terminal: \(error)"
         }
-        saverStates = nil
+        invalidateSaverStates()
         refresh()
     }
 
@@ -256,42 +250,58 @@ final class MenuBarModel: ObservableObject {
             installTimer = nil
         }
         if finished {
-            saverStates = nil
+            invalidateSaverStates()
             refresh()
         }
     }
 
-    private func refreshSavers(store: Store, sessionId: String?) throws {
-        let now = Date()
-        if saverStates.map({ now.timeIntervalSince($0.at) > Self.saverCacheInterval }) ?? true {
-            saverStates = (now, switchboard.states())
-            saverInstalls = Dictionary(uniqueKeysWithValues: TokenSaver.allCases.map { ($0, installer.installation(of: $0)) })
-        }
-        if saverLedger.map({ now.timeIntervalSince($0.at) > Self.saverCacheInterval }) ?? true {
-            saverLedger = (now, store.ledger(since: now.addingTimeInterval(-31 * 86_400), environment: environment))
-        }
-        let report = try sessionId.map { try store.saverReport(sessionId: $0, ledger: saverLedger?.entries ?? []) }
-        var comparison: [TokenSaver: OutputComparison] = [:]
-        if let cwd = report?.cwd {
-            if let cached = saverComparison, cached.cwd == cwd, now.timeIntervalSince(cached.at) < Self.saverCacheInterval * 5 {
-                comparison = cached.value
-            } else {
-                let since = Timestamps.string(from: now.addingTimeInterval(-30 * 86_400))
-                comparison = try store.outputComparisons(cwd: cwd, since: since)
-                saverComparison = (now, cwd, comparison)
+    private func invalidateSaverStates() {
+        saverSnapshot?.states = nil
+        saverStatesGeneration = UUID()
+    }
+
+    private func refreshSavers(sessionId: String?) {
+        guard !isStopping else { return }
+        guard saverRefreshTask == nil else { saverRefreshPending = true; return }
+        saverRefreshPending = false
+        let generation = serviceGeneration
+        let statesGeneration = saverStatesGeneration
+        let path = databasePath
+        let environment = environment
+        let cached = saverSnapshot
+        let cacheInterval = Self.saverCacheInterval
+        saverRefreshTask = Task {
+            let result = await Task.detached {
+                Result { try SaverSnapshot.read(path: path, sessionId: sessionId, environment: environment,
+                                                cached: cached, cacheInterval: cacheInterval) }
+            }.value
+            saverRefreshTask = nil
+            guard generation == serviceGeneration, !isStopping else { return }
+            guard statesGeneration == saverStatesGeneration, sessionId == state.sessionId else {
+                refreshSavers(sessionId: state.sessionId)
+                return
             }
+            switch result {
+            case .success(let data):
+                saverSnapshot = data
+                savers = SaverPanel.build(report: data.report, states: data.states?.states ?? [:],
+                                          comparisons: data.comparison,
+                                          installed: Set(data.installs.filter { $0.value.isInstalled }.keys),
+                                          pending: saverPending.merging(saverResults) { _, result in result },
+                                          undoable: Set(saverUndo.keys))
+                if popoverIsOpen { resultsShown.formUnion(saverResults.keys) }
+            case .failure(let error): errorMessage = "\(error)"
+            }
+            if saverRefreshPending { refreshSavers(sessionId: state.sessionId) }
         }
-        savers = SaverPanel.build(report: report, states: saverStates?.states ?? [:], comparisons: comparison,
-                                  installed: Set(saverInstalls.filter { $0.value.isInstalled }.keys),
-                                  pending: saverPending.merging(saverResults) { _, result in result },
-                                  undoable: Set(saverUndo.keys))
-        if popoverIsOpen { resultsShown.formUnion(saverResults.keys) }
     }
 
     var readStore: Store?
     var tailer: SessionTailer?
     var refreshTimer: Timer?
     var refreshTask: Task<Void, Never>?
+    var displayRefreshTask: Task<Void, Never>?
+    private var displayRefreshPending = false
     var restartTask: Task<Void, Never>?
     var serviceGeneration = UUID()
     var isStopping = false
@@ -312,7 +322,6 @@ final class MenuBarModel: ObservableObject {
         self.environment = environment
         switchboard = SaverSwitchboard(environment: environment)
     }
-
 }
 
 extension MenuBarModel {
@@ -323,62 +332,54 @@ extension MenuBarModel {
     }
 
     func refresh() {
-        guard let readStore else { return }
-        do {
-            let latest = try readStore.latestCall()
-            let resolved = try SessionSelection.resolve(selection, latestOverall: latest) {
-                try readStore.latestCall(sessionId: $0)
+        guard readStore != nil, !isStopping else { return }
+        guard displayRefreshTask == nil else { displayRefreshPending = true; return }
+        displayRefreshPending = false
+        let generation = serviceGeneration
+        let path = databasePath
+        let selection = selection
+        let focus = focus
+        let held = heldSessionId
+        let isOpen = popoverIsOpen
+        let limit = Self.pickerLimit
+        displayRefreshTask = Task {
+            let result = await Task.detached {
+                Result { try MenuBarSnapshot.read(path: path, selection: selection, focus: focus,
+                                                  held: isOpen ? held : nil, limit: limit) }
+            }.value
+            displayRefreshTask = nil
+            guard generation == serviceGeneration, readStore != nil, !isStopping else { return }
+            guard selection == self.selection, focus == self.focus,
+                  held == heldSessionId, isOpen == popoverIsOpen else {
+                refresh()
+                return
             }
-            menuBarState = MenuBarFormatter.state(for: resolved)
-
-            var shown = resolved
-            if selection == .automatic, popoverIsOpen {
-                if let held = heldSessionId, let stillThere = try readStore.latestCall(sessionId: held) {
-                    shown = stillThere
-                } else {
-                    heldSessionId = resolved?.sessionId
-                }
+            switch result {
+            case .success(let data):
+                menuBarState = data.menuBarState
+                state = data.state
+                pinFellBack = data.pinFellBack
+                if selection == .automatic, isOpen { heldSessionId = data.state.sessionId }
+                sessions = data.sessions
+                projects = ProjectGroup.build(sessions: data.sessions)
+                agents = data.agents
+                self.focus = data.focus
+                if case .agent(let id) = data.focus {
+                    focusedAgent = data.agents?.flattened.first { $0.agent.agentId == id }?.agent
+                } else { focusedAgent = nil }
+                history = data.history
+                composition = data.composition
+                sessionLink = data.sessionLink
+                planLimits = data.planLimits
+                planLimitUsage = data.planLimitUsage
+                refreshSavers(sessionId: data.state.sessionId)
+                errorMessage = nil
+            case .failure(let error): errorMessage = "\(error)"
             }
-            pinFellBack = selection.pinnedSessionId != nil && shown?.sessionId != selection.pinnedSessionId
-            state = MenuBarFormatter.state(for: shown)
-            sessions = try readStore.recentSessions(limit: Self.pickerLimit)
-            projects = ProjectGroup.build(sessions: sessions)
-
-            let tree = try shown.map { try readStore.agentTree(sessionId: $0.sessionId) }
-            agents = tree
-            // A focus that this session has no agent for — the session changed
-            // under us, or the agent's rows have not been ingested yet — falls
-            // back to the main thread rather than showing an empty chart.
-            if case .agent(let agentId) = focus,
-               tree?.flattened.contains(where: { $0.agent.agentId == agentId }) != true {
-                focus = .mainThread
-            }
-            focusedAgent = {
-                guard case .agent(let agentId) = focus else { return nil }
-                return tree?.flattened.first { $0.agent.agentId == agentId }?.agent
-            }()
-
-            history = try shown.map { try readStore.contextHistory(sessionId: $0.sessionId, scope: focus) }
-            composition = try shown.flatMap { try readStore.composition(sessionId: $0.sessionId, scope: focus) }
-            sessionLink = try shown.flatMap { try readStore.sessionLink(sessionId: $0.sessionId) }
-            try refreshSavers(store: readStore, sessionId: shown?.sessionId)
-
-            let limits = PlanLimitFormatter.displays(for: try readStore.planLimits())
-            planLimits = limits
-            var usage: [String: Store.WindowUsage] = [:]
-            for limit in limits {
-                guard let start = limit.windowStart else { continue }
-                usage[limit.id] = try readStore.windowUsage(vendor: limit.vendor, since: Timestamps.string(from: start))
-            }
-            planLimitUsage = usage
-            errorMessage = nil
-        } catch {
-            errorMessage = "\(error)"
+            if displayRefreshPending { refresh() }
         }
     }
 
-    /// Full re-sweep of the transcript tree, off the main thread: on a large
-    /// backlog this is seconds of work, not milliseconds.
     func refreshNow() {
         guard isWatching, !isStopping, refreshTask == nil, let tailer else { return }
         let generation = serviceGeneration
