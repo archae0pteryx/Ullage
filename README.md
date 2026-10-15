@@ -222,9 +222,14 @@ Pass a directory to install elsewhere, e.g. `scripts/install-app.sh ~/Applicatio
 
 ### Develop and test the menu bar app
 
+Install [Task](https://taskfile.dev/docs/installation) (`brew install go-task`),
+then use the Taskfile as a shortcut to the existing scripts:
+
 ```bash
-scripts/dev.sh                       # Debug build → replace /Applications/Ullage.app → run
-scripts/dev.sh ~/Applications        # use a different installation directory
+task setup                           # install linters and resolve Swift packages
+task dev                             # Debug build → replace /Applications/Ullage.app → run
+task dev INSTALL_DIR="$HOME/Applications"  # use a different installation directory
+task clean dev                       # remove old build artifacts, then rebuild/install/run
 ```
 
 Rerun after code changes. Builds are incremental and use your Mac's architecture;
@@ -233,11 +238,27 @@ quitting the old app, waits for shutdown, replaces only the app bundle, and star
 the Debug build in the foreground with logs in your terminal. Quit Ullage from its
 menu to end the run. It keeps your existing history and preferences; replacing a
 Homebrew app shortcut leaves the Cellar installation and CLI service intact.
-To use a separate database, run `ULLAGE_DB=/tmp/ullage-dev.db scripts/dev.sh`.
+To use a separate database, run `ULLAGE_DB=/tmp/ullage-dev.db task dev`.
+`task clean` removes Swift build artifacts, `dist/`, and `coverage/`; it keeps
+the installed app, history, and preferences. The scripts also work directly:
+`scripts/dev.sh [installation-directory]`.
+
+Run `task` to list all commands:
+
+| Task | Purpose |
+| --- | --- |
+| `task build` | Build the Debug package without installing |
+| `task install` | Build and install a Release app |
+| `task run` | Open the installed app without rebuilding |
+| `task test` | Run the script and Swift tests |
+| `task coverage` | Run tests, generate `coverage/html/index.html`, enforce 85% Core coverage |
+| `task lint` | Run automation and Swift linters |
+| `task check` | Build, lint, and test with coverage |
+| `task package` | Build and verify a universal DMG in `dist/` |
 
 For the new controls, check left-click, right-click, and Control-click; restart
 monitoring and confirm history stays; then Quit and confirm the terminal returns.
-Automated regression tests: `swift test --filter ServiceControlsTests`.
+Automated regression tests: `task test -- --filter ServiceControlsTests`.
 
 For breakpoints, [open the package in Xcode](https://developer.apple.com/documentation/xcode/creating-a-standalone-swift-package-with-xcode),
 select the `UllageApp` scheme and My Mac, then Run (⌘R). Quit any installed copy first. You can also attach Xcode's
