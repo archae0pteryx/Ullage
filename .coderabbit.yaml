@@ -1,0 +1,22 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+# Keep the shared organization review policy; specialize only the file scope.
+inheritance: true
+
+reviews:
+  path_filters:
+    - "**/*.{swift,c,h,sh,py}"
+    - "Taskfile.yml"
+    - ".github/workflows/*.{yml,yaml}"
+    - "!docs/**"
+    - "!assets/**"
+    - "!Tests/Fixtures/**"
+    - "!**/.build/**"
+    - "!**/.swiftpm/**"
+    - "!**/DerivedData/**"
+    - "!**/build/**"
+    - "!**/coverage/**"
+    - "!**/xcuserdata/**"
+    - "!**/Generated/**"
+    - "!**/*.generated.swift"
+    - "!Sources/UllageCore/ModelWindows.swift"
+    - "!Sources/UllageCore/WebIcon.swift"
