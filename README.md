@@ -171,7 +171,7 @@ Requires macOS 14 or later. Building from source also requires Swift 6 (Xcode 16
 
 ### Download the app
 
-From a [release](https://github.com/archae0pteryx/Ullage/releases), download
+From a [release](https://github.com/sturdynut/Ullage/releases), download
 `Ullage-X.Y.Z-universal.dmg`, open it, and drag **Ullage** onto **Applications**.
 Eject the disk image, then open Ullage from Applications. The same download runs
 on Apple Silicon and Intel Macs; no Homebrew, compiler, or Terminal linking step
@@ -635,7 +635,7 @@ there is no percentage to compute for those sessions.
 - **Window sizes are a lookup table** for agents that don't write theirs down.
   A Claude model Ullage doesn't recognize falls back to 200k and is flagged as
   assumed; any other unknown model gets no gauge until the table is updated.
-- **macOS 14+ only** for the app. Release DMGs are signed and notarized;
+- **macOS 14+ only** for the app. The release workflow signs and notarizes DMGs;
   local source builds use an ad-hoc signature unless a Developer ID is supplied.
 - **The menu bar item can be hidden.** On Macs with a notch and many menu bar
   apps, macOS may tuck Ullage's item out of sight; a menu bar manager can pin it.
@@ -670,9 +670,9 @@ not notarized; downloaded copies may be blocked by Gatekeeper.
 Swift test suite with coverage, and builds and verifies a universal DMG on every
 PR and push to `main`. It also copies the app from the DMG and verifies that it
 launches and initializes a disposable database on the macOS runner.
-Its downloadable app artifacts are local test builds. The **verify** check is
-required before merging to protected `main`. Actions are pinned to commit SHAs;
-Dependabot proposes updates weekly.
+Its downloadable app artifacts are local test builds. To make verification a
+merge gate, require the **verify** check in branch protection for `main`. Actions
+are pinned to commit SHAs; Dependabot proposes updates weekly.
 The Swift package currently has no third-party dependencies to audit.
 
 Coverage measures executable **UllageCore** code, excluding test code, the CLI,
