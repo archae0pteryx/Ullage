@@ -6,10 +6,40 @@ import UllageCore
 /// Runs unsandboxed: reading ~/.claude from a sandboxed app needs entitlements,
 /// which is a packaging task and not this milestone's problem.
 @main
-struct UllageApp: App {
-    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    var body: some Scene {
-        Settings { EmptyView() }
+@MainActor
+struct UllageApp {
+    static func main() {
+        let app = NSApplication.shared
+        let delegate = AppDelegate()
+        app.delegate = delegate
+        app.mainMenu = mainMenu()
+        // All windows belong to MenuBarController; a placeholder Settings scene
+        // otherwise gives SwiftUI an empty window to open on launch/reopen.
+        app.setActivationPolicy(.accessory)
+        withExtendedLifetime(delegate) { app.run() }
+    }
+
+    static func mainMenu() -> NSMenu {
+        let menu = NSMenu()
+        let appMenu = NSMenu(title: "Ullage")
+        appMenu.addItem(withTitle: "Quit Ullage", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        let editMenu = NSMenu(title: "Edit")
+        editMenu.addItem(withTitle: "Undo", action: Selector(("undo:")), keyEquivalent: "z")
+        let redo = editMenu.addItem(withTitle: "Redo", action: Selector(("redo:")), keyEquivalent: "z")
+        redo.keyEquivalentModifierMask = [.command, .shift]
+        editMenu.addItem(.separator())
+        editMenu.addItem(withTitle: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        editMenu.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        editMenu.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        editMenu.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        let windowMenu = NSMenu(title: "Window")
+        windowMenu.addItem(withTitle: "Close", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
+        windowMenu.addItem(withTitle: "Minimize", action: #selector(NSWindow.performMiniaturize(_:)),
+                           keyEquivalent: "m")
+        for submenu in [appMenu, editMenu, windowMenu] {
+            menu.addItem(withTitle: submenu.title, action: nil, keyEquivalent: "").submenu = submenu
+        }
+        return menu
     }
 }
 
