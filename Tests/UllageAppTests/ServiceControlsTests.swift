@@ -5,6 +5,16 @@ import UllageCore
 
 @MainActor
 final class ServiceControlsTests: XCTestCase {
+    func testNativeAppMenuPreservesEditingWithoutAnEmptySettingsCommand() {
+        let menu = UllageApp.mainMenu()
+        let items = menu.items.flatMap { $0.submenu?.items ?? [] }
+        XCTAssertFalse(items.contains { $0.title.contains("Settings") })
+        XCTAssertTrue(items.contains { $0.action == #selector(NSText.copy(_:)) && $0.keyEquivalent == "c" })
+        XCTAssertTrue(items.contains { $0.action == #selector(NSText.paste(_:)) && $0.keyEquivalent == "v" })
+        XCTAssertTrue(items.contains { $0.action == #selector(NSWindow.performClose(_:)) && $0.keyEquivalent == "w" })
+        XCTAssertTrue(items.contains { $0.action == #selector(NSApplication.terminate(_:)) && $0.keyEquivalent == "q" })
+    }
+
     func testCachedDisplayLoadsBeforeWatcherStartupFinishes() async throws {
         let watcher = ControlledWatcher()
         let entered = expectation(description: "watcher startup pending")
@@ -216,6 +226,7 @@ final class ServiceControlsTests: XCTestCase {
         controller.openWindow(id: MainWindow.id)
         let mainWindow = try XCTUnwrap(NSApp.windows.first { $0.title == "Ullage" && $0.isVisible })
         XCTAssertNotNil(mainWindow.toolbar)
+        XCTAssertTrue(mainWindow.styleMask.contains(.resizable))
         controller.openWindow(id: MainWindow.id)
         XCTAssertEqual(NSApp.windows.filter { $0.title == "Ullage" && $0.isVisible }.count, 1)
         controller.openWindow(id: DashboardWindow.id)
