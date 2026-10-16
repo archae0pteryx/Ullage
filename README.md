@@ -21,6 +21,9 @@ claude-mem.
   agent) aren't included.
 - **Some agents don't write token counts Ullage can read.** Cursor, Copilot CLI,
   Factory Droid and Zed show activity but no gauge.
+- **Playback currently reads Claude Code and Codex transcripts.** Other
+  harnesses keep their existing usage views. Exact request contents require
+  an existing, linked Claude recording; transcripts alone remain partial.
 - **macOS** for the menu bar app; the `ullage` command line also runs on Linux.
 
 > **Ullage** — the empty space left at the top of a barrel or tank. Here, the
@@ -98,10 +101,15 @@ claude-mem.
     status ×12`), and what is **along for the ride**: tool results from 50+
     turns ago still re-sent every turn, and files read more than once (all
     `≈`; 50 is a rule of thumb, not a measurement).
-  - **Session**: the chart at full size, every figure, and each cache rebuild
-    with its turn, size and cause. For an agent other than Claude Code, **What
-    it records** lists what that agent doesn't write down (no cache split, no
-    subagents, no gauge) so a missing figure never looks like a zero.
+  - **Session**: a playback workspace, the chart at full size, every figure,
+    and each cache rebuild with its turn, size and cause. In playback, select
+    an earlier step to inspect its usage and recorded calls and contents;
+    return to live explicitly when ready. Transcript contents are partial
+    evidence, not an exact model-request snapshot. A recording folder you
+    select can supply captured request contents where the source records
+    their linkage. For an agent other than Claude Code, **What it records**
+    lists what that agent doesn't write down (no cache split, no subagents,
+    no gauge) so a missing figure never looks like a zero.
   - **Agents**: the tree of **subagents the session spawned**, each named by
     the description the agent above it wrote and each with **its own window and
     occupancy**. Click one and the chart, Context and Session figures switch
@@ -164,6 +172,14 @@ Ullage only reads Claude Code's config, with one exception: when you flip a
 switch that one tool on or off. It backs the file up first and never throws
 anything away. Installing or uninstalling a context tool runs that tool's own
 commands, in Terminal, after showing them to you.
+
+Playback reads source files on demand and does not archive request bodies in
+the database or expose them through the phone page or OTLP export. Recordings
+may contain sensitive prompts, code, and tool results. You control their
+retention: deleting a source file makes its contents unavailable in playback.
+Ullage does not enable request capture or change agent settings for playback.
+See the [playback design and acceptance checks](docs/designs/context-playback.md)
+for its evidence boundaries and deferred features.
 
 ## Install
 
