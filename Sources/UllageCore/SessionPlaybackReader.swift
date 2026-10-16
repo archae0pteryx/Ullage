@@ -57,7 +57,9 @@ public final class SessionPlaybackReader {
     }
     files = files.filter { paths.contains($0.key) }
     var result = SessionPlayback()
+    var loadedPaths = Set<String>()
     for source in sources {
+      guard loadedPaths.insert(source.path).inserted else { continue }
       guard source.vendor == Vendor.claudeCode || source.vendor == Vendor.codex else {
         result.notices.append("Playback contents are unavailable for \(source.vendor).")
         continue
@@ -119,6 +121,7 @@ public final class SessionPlaybackReader {
     guard var snapshot = event.snapshot else { return nil }
     snapshot.body = nil
     snapshot.completeness = .partial
+    let directoryPath = recordingDirectory.standardizedFileURL.resolvingSymlinksInPath().path
     guard let url = confinedFile(snapshot.sourcePath, directory: recordingDirectory) else {
       selectedSnapshot = nil
       snapshot.notice = "Request file is outside the selected recording directory."
@@ -127,10 +130,15 @@ public final class SessionPlaybackReader {
     do {
       let handle = try regularHandle(url)
       defer { try? handle.close() }
-      let attrs = try FileManager.default.attributesOfItem(atPath: url.path)
-      let inode = (attrs[.systemFileNumber] as? NSNumber)?.uint64Value ?? 0
-      let size = (attrs[.size] as? NSNumber)?.uint64Value ?? 0
-      let mtime = (attrs[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
+      let info = try confinedInfo(handle, directoryPath: directoryPath)
+      let inode = UInt64(info.st_ino)
+      let size = UInt64(info.st_size)
+      #if canImport(Darwin)
+        let modified = info.st_mtimespec
+      #else
+        let modified = info.st_mtim
+      #endif
+      let mtime = Double(modified.tv_sec) + Double(modified.tv_nsec) / 1_000_000_000
       if let cached = selectedSnapshot, cached.path == url.path, cached.inode == inode,
         cached.mtime == mtime, cached.size == size {
         return cached.snapshot
@@ -161,12 +169,15 @@ public final class SessionPlaybackReader {
   }
 
   private func addRequests(directory: URL, sessionId: String, result: inout SessionPlayback) {
+    let directoryPath = directory.standardizedFileURL.resolvingSymlinksInPath().path
     let index = directory.appendingPathComponent("index.jsonl").path
     guard confinedFile(index, directory: directory) != nil else {
       result.notices.append("Recording index is outside the selected directory.")
       return
     }
-    guard let state = load(path: index, source: nil, sessionId: sessionId, notices: &result.notices)
+    guard let state = load(
+      path: index, source: nil, sessionId: sessionId, notices: &result.notices,
+      recordingDirectoryPath: directoryPath)
     else { return }
     if !state.pending.isEmpty { result.pendingLineCount += 1 }
     let anchors = Dictionary(
@@ -199,6 +210,28 @@ public final class SessionPlaybackReader {
       (path.hasPrefix("/") ? URL(fileURLWithPath: path) : directory.appendingPathComponent(path))
       .standardizedFileURL.resolvingSymlinksInPath()
     return file.path.hasPrefix(base.path + "/") ? file : nil
+  }
+
+  func confinedInfo(_ handle: FileHandle, directoryPath: String) throws -> stat {
+    var info = stat()
+    guard fstat(handle.fileDescriptor, &info) == 0 else {
+      throw CocoaError(.fileReadNoPermission)
+    }
+    // Check the opened file: parent directories can change after path validation.
+    #if canImport(Darwin)
+      var path = [CChar](repeating: 0, count: Int(MAXPATHLEN))
+      guard fcntl(handle.fileDescriptor, F_GETPATH, &path) == 0 else {
+        throw CocoaError(.fileReadNoPermission)
+      }
+      let openedPath = String(cString: path)
+    #else
+      let openedPath = try FileManager.default.destinationOfSymbolicLink(
+        atPath: "/proc/self/fd/\(handle.fileDescriptor)")
+    #endif
+    guard URL(fileURLWithPath: openedPath).standardizedFileURL.path.hasPrefix(directoryPath + "/") else {
+      throw CocoaError(.fileReadNoPermission)
+    }
+    return info
   }
 
   func regularHandle(_ url: URL) throws -> FileHandle {

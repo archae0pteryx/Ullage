@@ -361,6 +361,10 @@ extension SessionPlaybackTests {
       call: CallRow(
         dedupeKey: "c", ts: "t", sessionId: "s2", contextTokens: 1,
         sourceFile: "/other.jsonl"))
+    try store.upsert(
+      call: CallRow(
+        dedupeKey: "d", ts: "t", agentId: "child", sessionId: "s1",
+        contextTokens: 1, sourceFile: "/main.jsonl"))
     XCTAssertEqual(
       try store.playbackSources(sessionId: "s1"),
       [

@@ -1,7 +1,10 @@
 import Foundation
 
 extension SessionPlaybackReader {
-  func load(path: String, source: PlaybackSource?, sessionId: String, notices: inout [String])
+  func load(
+    path: String, source: PlaybackSource?, sessionId: String, notices: inout [String],
+    recordingDirectoryPath: String? = nil
+  )
     -> FileState? {
     do {
       let attrs = try FileManager.default.attributesOfItem(atPath: path)
@@ -24,6 +27,7 @@ extension SessionPlaybackReader {
       if state.offset < size {
         let handle = try regularHandle(URL(fileURLWithPath: path))
         defer { try? handle.close() }
+        if let recordingDirectoryPath { _ = try confinedInfo(handle, directoryPath: recordingDirectoryPath) }
         try handle.seek(toOffset: state.offset)
         try readAppend(
           handle: handle, size: size, source: source, sessionId: sessionId, state: &state)
