@@ -1,0 +1,15 @@
+{
+  "id": "squeez",
+  "name": "squeez",
+  "kind": "outputFilter",
+  "shrinks": "bash output, code reads, and cross-call duplicates",
+  "about": "Hook-based output filter and MCP server that compresses bash output and code before the model reads them, with zero runtime dependencies.",
+  "detect": {
+    "hookCommand": ["squeez"],
+    "mcpServer": ["^squeez$"]
+  },
+  "harnesses": ["Claude Code", "OpenAI Codex CLI", "OpenCode", "Gemini CLI", "Copilot CLI", "Pi", "Hermes"],
+  "sources": [
+    "https://github.com/claudioemmanuel/squeez"
+  ]
+}
