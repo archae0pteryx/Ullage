@@ -1,0 +1,15 @@
+{
+  "id": "winnow",
+  "name": "winnow",
+  "kind": "outputFilter",
+  "shrinks": "tool output, logs, and conversation history with recoverable compression",
+  "about": "Local-first context compression tool that compresses output before the model reads it while keeping original content recoverable on demand.",
+  "detect": {
+    "bash": ["^winnow$"],
+    "hookCommand": ["winnow"]
+  },
+  "harnesses": ["Claude Code"],
+  "sources": [
+    "https://glama.ai/mcp/servers/jpoindexter/winnow"
+  ]
+}

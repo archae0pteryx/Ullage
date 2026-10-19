@@ -1,0 +1,16 @@
+{
+  "id": "context-optimizer",
+  "name": "context-optimizer",
+  "kind": "outputFilter",
+  "shrinks": "API tokens through context awareness, identifies wasted context, generates efficiency reports",
+  "about": "Claude Code plugin and hooks system that tracks token usage, identifies wasted context, generates heatmaps, ROI reports, and budget alerts.",
+  "detect": {
+    "plugin": ["^context-optimizer@"],
+    "skill": ["^context-optimizer($|:)"],
+    "hookCommand": ["context-optimizer"]
+  },
+  "harnesses": ["Claude Code"],
+  "sources": [
+    "https://github.com/egorfedorov/claude-context-optimizer"
+  ]
+}
