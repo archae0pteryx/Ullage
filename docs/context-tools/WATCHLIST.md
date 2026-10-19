@@ -15,14 +15,19 @@ Weekly tracking of context-saving tools for AI coding agents.
 
 ## New Candidates (First Check)
 
-| Tool | Kind | Harnesses | Latest | Status | Notes |
-|---|---|---|---|---|---|
-| token-optimizer-mcp | onDemand | Claude Code, multiple CLI clients | v7.5.0 | candidate | MCP server, claims 60-90% reduction |
-| context-optimizer | plugin | Claude Code | v4.23+ | candidate | Tracks usage, generates reports |
-| squeez | outputFilter + MCP | Claude Code, OpenCode, Copilot CLI, others | v1.46.0+ | candidate | Zero dependencies, 95% bash compression claim |
-| winnow | outputFilter | Claude Code, generic | July 2026 | candidate | Recoverable compression, 40-95% claim |
-| mcp-compressor | outputFilter | Claude Code (MCP) | unconfirmed | candidate | Schema compression proxy, 70-97% claim |
-| context-compress | outputFilter + onDemand | Claude Code (MCP + hook) | unconfirmed | candidate | Structural compression, claims 99.2% reduction |
-| ReCompress | onDemand | Generic (research) | research | research | UC Berkeley hackathon prize, model-based |
-| CtxGuard | outputFilter | Generic (research) | Oct 2026 | research | Governance gateway, Chinese docs |
-| claude-code-hooks | framework | Claude Code | unconfirmed | research | Plugin marketplace, not itself a saver |
+Kinds are the descriptor kinds in `docs/CONTEXT-TOOLS.md`. Latest version is the
+GitHub release on the date checked.
+
+| Tool | Kind | Harnesses | Repo/home | Latest | Status | Notes |
+|---|---|---|---|---|---|---|
+| token-optimizer-mcp | onDemand | Claude Code, multiple CLI clients | https://github.com/ooples/token-optimizer-mcp | v7.5.1 | candidate | MCP server, claims 60-90% reduction |
+| squeez | outputFilter | Claude Code, OpenCode, Copilot CLI, others | https://github.com/claudioemmanuel/squeez | v1.48.18 | candidate | Hook plus MCP server, claims up to 95% bash compression |
+| winnow | outputFilter | Claude Code, generic | https://github.com/jpoindexter/winnow | no release (pushed 2026-07-09) | candidate | Recoverable compression, claims 40-95% |
+| mcp-compressor | onDemand | Claude Code (MCP) | https://github.com/atlassian-labs/mcp-compressor | v0.38.0 | candidate | Schema compression proxy, claims 70-97% |
+| context-firewall | onDemand | Claude Code, Cursor | https://github.com/alepha188838884/context-firewall | v0.4.0 | candidate | Wraps MCP servers, claims 60-95% output reduction |
+| context-compress | outputFilter | Claude Code (MCP + hook) | https://github.com/Open330/context-compress | v2026.8.3 | candidate | Structural compression, claims 99.2% reduction |
+| context-optimizer | — | Claude Code | https://github.com/egorfedorov/claude-context-optimizer | v5.0.2 | not a saver | Tracks usage and reports waste; shrinks nothing itself |
+| context-compress (vidanov) | — | Claude Code, others | https://github.com/vidanov/context-compress | no release (pushed 2026-05-26) | stale | Same name as Open330's; compresses instruction files |
+| ReCompress | — | Generic (research) | — | — | research | UC Berkeley hackathon prize, model-based |
+| CtxGuard | — | Generic (research) | — | — | research | Governance gateway, Chinese docs |
+| claude-code-hooks | — | Claude Code | — | — | research | Plugin marketplace, not itself a saver |

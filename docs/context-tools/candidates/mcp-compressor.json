@@ -1,7 +1,7 @@
 {
   "id": "mcp-compressor",
   "name": "mcp-compressor",
-  "kind": "outputFilter",
+  "kind": "onDemand",
   "shrinks": "MCP tool schemas and responses through proxy compression",
   "about": "Wraps MCP tool servers to compress their schemas; the model sees compressed surface first and can request full schema on demand.",
   "detect": {
