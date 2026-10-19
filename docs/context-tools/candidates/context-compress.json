@@ -1,0 +1,15 @@
+{
+  "id": "context-compress",
+  "name": "context-compress",
+  "kind": "outputFilter",
+  "shrinks": "tool output using structural compression units rather than token-level extraction",
+  "about": "MCP server and hook toolkit that compresses tool output to save context window tokens using structural units, claimed to preserve agent stability better than token-level compression.",
+  "detect": {
+    "mcpServer": ["^context-compress$"],
+    "hookCommand": ["context-compress"]
+  },
+  "harnesses": ["Claude Code"],
+  "sources": [
+    "https://github.com/Open330/context-compress"
+  ]
+}
