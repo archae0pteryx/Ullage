@@ -1,0 +1,30 @@
+{
+  "id": "token-optimizer-mcp",
+  "name": "token-optimizer-mcp",
+  "kind": "onDemand",
+  "shrinks": "context tokens across 16 AI coding agent CLI clients",
+  "about": "MCP server that measures token savings per agent, optimizes context usage, and maintains a live local knowledge graph.",
+  "detect": {
+    "mcpServer": ["^token-optimizer$", "^token-optimizer-mcp$"]
+  },
+  "install": {
+    "setup": [
+      {
+        "command": "claude mcp add --scope user token-optimizer-mcp -- token-optimizer-mcp serve",
+        "purpose": "Register token-optimizer-mcp MCP server with Claude Code",
+        "needs": "claude"
+      }
+    ],
+    "teardown": [
+      {
+        "command": "claude mcp remove --scope user token-optimizer-mcp",
+        "purpose": "Unregister token-optimizer-mcp from Claude Code",
+        "needs": "claude"
+      }
+    ]
+  },
+  "harnesses": ["Claude Code", "OpenAI Codex CLI", "OpenCode", "Pi", "Gemini CLI", "Qwen Code"],
+  "sources": [
+    "https://github.com/ooples/token-optimizer-mcp/releases/tag/v7.5.0"
+  ]
+}
